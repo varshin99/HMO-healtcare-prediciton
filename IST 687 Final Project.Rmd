@@ -1,0 +1,575 @@
+---
+title: "Final_Project-Group-1"
+output: html_document
+date: "2023-04-23"
+---
+
+```{r}
+### Data Cleaning and Manipulation Packages
+library(tidyverse)
+#install.packages('tseries')
+library(tseries)
+#install.packages('imputeTS')
+library(imputeTS)
+
+### Data Visualization Packages
+library(ggplot2)
+#install.packages("ggmap", dependencies=TRUE)
+library(ggmap)
+#install.packages("maps",dependencies=TRUE)
+library(maps)
+#install.packages("mapproj", dependencies = TRUE)
+library(mapproj)
+#install.packages("usmap",dependencies = TRUE)
+library(usmap)
+
+### Prediction Models Packages
+#install.packages("caret",dependencies=TRUE)
+library(caret)
+#install.packages("MASS",dependencies=TRUE)
+library(MASS)
+#install.packages("kernlab",dependencies=TRUE)
+library(kernlab)
+#install.packages("glm2",dependencies=TRUE)
+library(glm2)
+```
+
+```{r}
+# Read the data from a CSV file and store it in the 'data' variable
+data <- read.csv("https://intro-datascience.s3.us-east-2.amazonaws.com/HMO_data.csv", stringsAsFactors = FALSE)
+
+```
+
+```{r}
+# Display the structure of the 'data' data frame
+str(data)
+# Show the first few rows of the 'data' data frame
+head(data)
+# Show the last few rows of the 'data' data frame
+tail(data)
+
+```
+```{r}
+# Converting 'bmi' and 'hypertension' columns to numeric data type in the 'data' data frame
+# Convert the 'bmi' column to numeric data type
+data$bmi <- as.numeric(data$bmi)
+# Convert the 'hypertension' column to numeric data type by replacing '1' with 1 and other values with 0 using ifelse function
+data$hypertension <- ifelse(data$hypertension == '1', 1, 0)
+```
+
+```{r}
+# Removing NAs from the 'data' data frame
+
+# Count the number of NAs in each column of the 'data' data frame using colSums
+colSums(is.na(data))
+
+# Interpolate missing values in the 'bmi' column using na_interpolation function
+data$bmi <- na_interpolation(data$bmi)
+
+# Interpolate missing values in the 'hypertension' column using na_interpolation function
+data$hypertension <- na_interpolation(data$hypertension)
+
+# Interpolate missing values in the 'cost' column using na_interpolation function
+data$cost <- na_interpolation(data$cost)
+
+# Display the structure of the updated 'data' data frame
+str(data)
+
+```
+
+```{r}
+# Using mean as a threshold for expensiveness in the 'data' data frame
+# Calculate the mean cost of the 'cost' column
+meanCost <- mean(data$cost)
+# Count the number of rows with costs below the mean cost
+no_below <- nrow(data[data$cost < meanCost,])
+print("Values less than the mean cost")
+print(no_below)
+# Count the number of rows with costs above the mean cost
+no_above <- nrow(data[data$cost > meanCost,])
+print("Values greater than the mean cost")
+print(no_above)
+meanCost
+```
+
+```{r}
+# Using median as a threshold for expensiveness in the 'data' data frame
+# Count the number of rows with costs less than or equal to the median cost (2500)
+print("Cost values less than median cost")
+n1 <- nrow(data[data$cost <= 2500,])
+print(n1)
+# Count the number of rows with costs greater than the median cost (2500)
+print("Cost values greater than median cost")
+n2 <- nrow(data[data$cost > 2500,])
+print(n2)
+```
+
+```{r}
+# Install the ggcorrplot package.
+#install.packages("ggcorrplot")
+
+# Load the ggcorrplot package.
+library(ggcorrplot)
+
+# Create a vector of variables to include in the correlation matrix.
+cols <- c("age", "bmi", "children", "hypertension","smoker","yearly_physical","exercise", "cost")
+
+# Create a model matrix with the variables in `cols`.
+model.matrix(~0+., data=data[,cols])
+
+# Compute the correlation matrix of the model matrix.
+cor(model.matrix(~0+., data=data[,cols]))
+
+# Plot the correlation matrix using ggcorrplot.
+ggcorrplot(cor(model.matrix(~0+., data=data[,cols])),
+            show.diag=FALSE,
+            type="lower",
+            lab=TRUE,
+            lab_size=2)
+#The highly correlated variables with cost are smoker, age, bmi, exercise.
+```
+
+
+```{r}
+# Adding a column 'exp' to the 'data' data frame for categorizing as 'Expensive' or 'Not Expensive' based on cost
+
+# Create a new column 'exp' and assign 'Not Expensive' if cost is less than or equal to 2500, otherwise 'Expensive'
+data$exp <- ifelse(data$cost <= 2500, 'Not Expensive', 'Expensive')
+
+# Show the first few rows of the updated 'data' data frame
+head(data)
+```
+```{r}
+#age to cost relation. Not conclusive
+ggplot(data,aes(x=age, y=cost)) +geom_bar(stat="identity") 
+
+#
+hist(data$bmi, col = "red", main = "Histogram of BMI", xlab = "BMI", ylab = "Frequency")
+
+#
+hist(data$cost, breaks = 25, col = "red", main = "Cost Histogram", xlab = "Cost", ylab = "Frequency")
+
+
+#age to bmi scatter plot
+ggplot(data)+geom_point(aes(x=age ,y=cost ,color=bmi))+
+ylab('cost')+xlab('age')+ggtitle("")
+
+
+#
+ggplot(data)+geom_point(aes(x=age ,y=cost ,color=smoker))+
+ylab('cost')+xlab('age')+ggtitle("")
+
+
+#
+ggplot(data)+geom_point(aes(x=age ,y=cost ,color=exercise))+
+ylab('cost')+xlab('age')+ggtitle("")
+
+
+#
+box_plot1 <- ggplot(data, aes(x = smoker, y = cost)) + geom_boxplot()
+box_plot1
+
+#
+#ggplot(data, aes(map_id= state_name))+aes(x=long, y=lat, group=group) +
+ #geom_polygon(aes(fill = cost), color = "white") + coord_map()
+```
+```{r}
+
+```
+
+```{r}
+# Convert the state names to lowercase
+data$location <- tolower(data$location)
+
+# Aggregate the average cost per state
+state_avg_cost <- data %>%
+  group_by(location) %>%
+  summarise(avg_cost = mean(cost))
+states_of_interest <- c("connecticut", "maryland", "massachusetts", "new jersey", "new york", "pennsylvania", "rhode island")
+# Get the map data for the US
+map_data <- map_data("state",regions=states_of_interest )
+
+# Merge the map data with the average cost data
+map_data_avg_cost <- merge(map_data, state_avg_cost, by.x = "region", by.y = "location")
+
+# Create the plot
+ggplot(map_data_avg_cost, aes(x = long, y = lat, group = group, fill = avg_cost)) +
+  geom_polygon(color = "black") +
+  scale_fill_gradient(low = "white", high = "orange") +
+  labs(title = "Average Cost per State", fill = "Average Cost") 
+  #coord_fixed()+
+ # theme_void()
+View(state_avg_cost)
+```
+
+```{r}
+#Rhode Island
+
+# Load required packages
+library(dplyr)
+library(maps)
+library(ggplot2)
+
+# Load the data
+#data <- read.csv("https://intro-datascience.s3.us-east-2.amazonaws.com/HMO_data.csv")
+
+# Convert the state names to lowercase
+data$location <- tolower(data$location)
+
+# Filter the data for Rhode Island
+ri_data <- data %>%
+  filter(location == "rhode island")
+
+# Calculate the average HMO member cost for Rhode Island
+ri_avg_cost <- mean(ri_data$cost)
+
+# Get the map data for Rhode Island using the 'maps' package
+map_data <- map_data("state", region = "rhode island")
+
+# Create the plot using ggplot2 package
+ggplot(map_data, aes(x = long, y = lat, group = group)) + # Define aesthetics for the plot
+  geom_polygon(fill = ri_avg_cost, color = "black") + # Draw polygons for Rhode Island and set the border color to black
+  ggtitle(paste0("Average HMO Member Cost in Rhode Island: $", round(ri_avg_cost, 2))) + # Add title for the plot
+  theme_void() + # Remove axes and gridlines for a clean map appearance
+  coord_fixed() # Fix the aspect ratio of the plot to keep the correct shape of Rhode Island map
+
+#NY
+
+# Filter the data for new york
+ny_data <- data %>%
+  filter(location == "new york")
+
+# Calculate the average HMO member cost for New York
+ny_avg_cost <- mean(ny_data$cost)
+
+# Get the map data for New York using the 'maps' package
+map_data <- map_data("state", region = "new york")
+
+# Create the plot using ggplot2 package
+ggplot(map_data, aes(x = long, y = lat, group = group)) + # Define aesthetics for the plot
+  geom_polygon(fill = ny_avg_cost, color = "black") + # Draw polygons for New York and set the border color to black
+  ggtitle(paste0("Average HMO Member Cost in New York: $", round(ny_avg_cost, 2))) + # Add title for the plot
+  theme_void() + # Remove axes and gridlines for a clean map appearance
+  coord_fixed() # Fix the aspect ratio of the plot to keep the correct shape of New York map
+
+# connecticut
+
+# Filter the data for connecticut
+cc_data <- data %>%
+  filter(location == "connecticut")
+
+# Calculate the average HMO member cost for Connecticut
+cc_avg_cost <- mean(cc_data$cost)
+
+# Get the map data for connecticut using the 'maps' package
+map_data <- map_data("state", region = "connecticut")
+
+# Create the plot using ggplot2 package
+ggplot(map_data, aes(x = long, y = lat, group = group)) + # Define aesthetics for the plot
+  geom_polygon(fill = cc_avg_cost, color = "black") + # Draw polygons for connecticut and set the border color to black
+  ggtitle(paste0("Average HMO Member Cost in Connecticut: $", round(cc_avg_cost, 2))) + # Add title for the plot
+  theme_void() + # Remove axes and gridlines for a clean map appearance
+  coord_fixed() # Fix the aspect ratio of the plot to keep the correct shape of connecticut map
+
+# Maryland
+
+m_data <- data %>%
+  filter(location == "maryland")
+
+# Calculate the average HMO member cost for maryland
+m_avg_cost <- mean(m_data$cost)
+
+# Get the map data for Maryland using the 'maps' package
+map_data <- map_data("state", region = "maryland")
+
+# Create the plot using ggplot2 package
+ggplot(map_data, aes(x = long, y = lat, group = group)) + # Define aesthetics for the plot
+  geom_polygon(fill = m_avg_cost, color = "black") + # Draw polygons for maryland and set the border color to black
+  ggtitle(paste0("Average HMO Member Cost in Maryland: $", round(m_avg_cost, 2))) + # Add title for the plot
+  theme_void() + # Remove axes and gridlines for a clean map appearance
+  coord_fixed() # Fix the aspect ratio of the plot to keep the correct shape of maryland map
+
+#Massachusetts
+
+ms_data <- data %>%
+  filter(location == "massachusetts")
+
+# Calculate the average HMO member cost for massachusetts
+ms_avg_cost <- mean(ms_data$cost)
+
+# Get the map data for Rhode Island using the 'maps' package
+map_data <- map_data("state", region = "massachusetts")
+
+# Create the plot using ggplot2 package
+ggplot(map_data, aes(x = long, y = lat, group = group)) + # Define aesthetics for the plot
+  geom_polygon(fill = ms_avg_cost, color = "black") + # Draw polygons for maryland and set the border color to black
+  ggtitle(paste0("Average HMO Member Cost in Massachusetts: $", round(ms_avg_cost, 2))) + # Add title for the plot
+  theme_void() + # Remove axes and gridlines for a clean map appearance
+  coord_fixed() # Fix the aspect ratio of the plot to keep the correct shape of massachusetts map
+
+#New Jersey
+
+nj_data <- data %>%
+  filter(location == "new jersey")
+
+# Calculate the average HMO member cost for Connecticut
+nj_avg_cost <- mean(nj_data$cost)
+
+# Get the map data for Rhode Island using the 'maps' package
+map_data <- map_data("state", region = "new jersey")
+
+# Create the plot using ggplot2 package
+ggplot(map_data, aes(x = long, y = lat, group = group)) + # Define aesthetics for the plot
+  geom_polygon(fill = nj_avg_cost, color = "black") + # Draw polygons for New Jersey and set the border color to black
+  ggtitle(paste0("Average HMO Member Cost in New Jersey: $", round(nj_avg_cost, 2))) + # Add title for the plot
+  theme_void() + # Remove axes and gridlines for a clean map appearance
+  coord_fixed() # Fix the aspect ratio of the plot to keep the correct shape of massachusetts map
+
+
+# Pennsylvania
+
+pn_data <- data %>%
+  filter(location == "pennsylvania")
+
+# Calculate the average HMO member cost for Pennsylvania
+pn_avg_cost <- mean(pn_data$cost)
+
+# Get the map data for Rhode Island using the 'maps' package
+map_data <- map_data("state", region = "pennsylvania")
+
+# Create the plot using ggplot2 package
+ggplot(map_data, aes(x = long, y = lat, group = group)) + # Define aesthetics for the plot
+  geom_polygon(fill = pn_avg_cost, color = "black") + # Draw polygons for Pennsylvania and set the border color to black
+  ggtitle(paste0("Average HMO Member Cost in Pennsylvania: $", round(pn_avg_cost, 2))) + # Add title for the plot
+  theme_void() + # Remove axes and gridlines for a clean map appearance
+  coord_fixed() # Fix the aspect ratio of the plot to keep the correct shape of pennsylvania map
+
+
+```
+
+
+
+```{r}
+# Summary Statistics for Smoker, Location Type, Education Level, Yearly Physical, Exercise, Married, Hypertension, and Gender 
+
+# Load the dplyr library for data manipulation
+library(dplyr)
+
+# Define the variable names to group by
+var_names <- c("smoker", "location_type", "education_level", "yearly_physical", "exercise", "married", "hypertension", "gender")
+
+# Calculate the mean cost for each group of each variable
+results <- data %>%
+  # Group the data by the specified variables
+  group_by(across(var_names)) %>%
+  # Summarize the data by calculating the mean cost for each group
+  summarise(mean_cost = mean(cost))
+  
+# View the results
+results
+
+```
+
+
+```{r}
+# Load necessary libraries
+library(caret)
+library(kernlab)
+library(rpart)
+library(rpart.plot)
+
+# Convert variables to factors
+data$yearly_physical <- as.factor(data$yearly_physical)
+data$exercise <- as.factor(data$exercise)
+data$exp <- as.factor(data$exp)
+data$smoker <- as.factor(data$smoker)
+
+# Display the structure of the data
+str(data)
+
+# Set seed for reproducibility
+set.seed(1000)
+
+# Split the data into training (60%) and testing (40%) sets
+trainList <- createDataPartition(y = data$exp, p = 0.60, list = FALSE)
+trainSet <- data[trainList,]
+testSet <- data[-trainList,]
+
+# Train the KSVM model with specified parameters
+model.ksvm <- ksvm(data = trainSet, exp~age+bmi+smoker+yearly_physical+exercise+hypertension, C=5, cross=3, prob.model=TRUE)
+
+# Make predictions on the test set
+pred.ksvm <- predict(model.ksvm, newdata = testSet)
+
+# Calculate the confusion matrix for the predictions
+confmat.ksvm <- confusionMatrix(pred.ksvm, testSet$exp)
+
+# Display the confusion matrix
+confmat.ksvm
+
+# The reported accuracy for this KSVM model is 84.96%
+```
+```{r}
+# Train the decision tree (rpart) model with specified control parameters
+model.tree <- rpart(exp ~ bmi+smoker+yearly_physical+exercise+hypertension, data = trainSet, control = c(maxdepth = 5, cp=0.002))
+
+# Plot the decision tree
+rpart.plot(model.tree)
+
+# Make predictions on the test set using the decision tree model
+model.tree.predict <- predict(model.tree, newdata=testSet, type = "class")
+
+# Calculate the confusion matrix for the decision tree model predictions
+confmat.tree <- confusionMatrix(model.tree.predict, testSet$exp)
+
+# Display the confusion matrix
+confmat.tree
+
+# The reported accuracy for this decision tree (rpart) model is 70.45%
+```
+```{r}
+df <- data
+
+# Remove the 'cost' and 'X' attributes from the data
+df <- df[, -c(which(names(df) %in% c("cost", "X")))]
+
+# Encode the categorical variables using one-hot encoding
+categorical_vars <- c("location", "location_type", "exercise", "smoker", "yearly_physical", "gender", "education_level", "married","exp")
+encoded_data <- model.matrix(~., data = df[, categorical_vars])
+
+# Remove the intercept column from the encoded data
+encoded_data <- encoded_data[, -1]
+
+# Define numeric columns to be normalized
+numeric_cols <- c("age", "bmi", "children", "hypertension")
+
+# Normalize the selected columns using range normalization
+ss <- preProcess(as.data.frame(df[numeric_cols]), method = c("range"))
+df[numeric_cols] <- predict(ss, as.data.frame(df[numeric_cols]))
+
+# Combine the encoded data with the numeric variables
+processed_data <- cbind(df[, numeric_cols], encoded_data)
+
+# Replace spaces with underscores in column names
+colnames(processed_data) <- gsub(" ", "_", colnames(processed_data))
+```
+ 
+
+
+
+
+
+
+```{r}
+# Prediction Metrics
+# Load pROC library for ROC analysis
+library(pROC)
+
+# Define a function to calculate accuracy
+accuracy <- function(predictions, actual) {
+  # Create confusion matrix
+  confusion_matrix <- table(predictions, actual)
+  # Calculate accuracy as the sum of the diagonal elements divided by the sum of all elements in the confusion matrix
+  accuracy <- (sum(diag(confusion_matrix)) / sum(confusion_matrix)) * 100
+  return(accuracy)
+}
+
+# Define a function to calculate recall
+recall <- function(predictions, actual) {
+  # Create confusion matrix
+  confusion_matrix <- table(predictions, actual)
+  # Calculate recall as the true positive rate
+  recall <- (confusion_matrix[2, 2] / sum(confusion_matrix[2, ])) * 100
+  return(recall)
+}
+
+# Define a function to calculate specificity
+specificity <- function(predictions, actual) {
+  # Create confusion matrix
+  confusion_matrix <- table(predictions, actual)
+  # Calculate specificity as the true negative rate
+  specificity <- (confusion_matrix[1, 1] / sum(confusion_matrix[1, ])) * 100
+  return(specificity)
+}
+
+# Define a function to calculate AUC ROC
+auc_roc <- function(predictions, actual) {
+  # Calculate the ROC curve
+  roc <- roc(actual, predictions)
+  # Calculate the AUC ROC
+  auc_roc <- auc(roc)
+  # Plot the ROC curve with AUC
+  plot(roc, print.auc = TRUE, main = "ROC Curve", col = "blue")
+  return(auc_roc)
+}
+```
+
+
+```{r}
+# Split the data into training and test sets
+set.seed(123)
+train_idx <- sample(nrow(processed_data), 0.7 * nrow(processed_data))
+train_data <- processed_data[train_idx, ]
+test_data <- processed_data[-train_idx, ]
+
+# Load the randomForest package
+library(randomForest)
+
+# Define the random forest model
+classifier_RF <- randomForest(x = train_data[, -ncol(train_data)],
+                               y = train_data$expNot_Expensive,
+                               ntree = 500,
+                               mtry = 5,
+                               nodesize = 30,
+                               maxnodes = 600)
+
+# Use the random forest model to predict the 'exp' attribute for the test set
+predictions <- predict(classifier_RF, test_data)
+
+# Convert the predicted probabilities to binary classifications
+binary_predictions <- ifelse(predictions >= 0.5, "Yes", "No")
+
+# Evaluate the performance of the random forest model
+accuracy(binary_predictions, test_data$exp)
+# Example usage:
+# Assuming 'binary_predictions' is the vector of binary predictions (Yes/No) and 'test_data$exp' is the actual labels
+acc <- accuracy(binary_predictions, test_data$exp)
+rec <- recall(binary_predictions, test_data$exp)
+spec <- specificity(binary_predictions, test_data$exp)
+auc <- auc_roc(predictions, test_data$exp)
+cat("Accuracy:", acc, "\n")
+cat("Recall:", rec, "\n")
+cat("Specificity:", spec, "\n")
+cat("AUC ROC:", auc, "\n")
+```
+```{r}
+# Split the data into training and test sets
+set.seed(123)
+train_idx <- sample(nrow(processed_data), 0.7 * nrow(processed_data))
+train_data <- processed_data[train_idx, ]
+test_data <- processed_data[-train_idx, ]
+
+# Install and load the xgboost package
+#install.packages("xgboost")
+library(xgboost)
+
+# Define the XGBoost model
+xgb_model <- xgboost(data = as.matrix(train_data[, -ncol(train_data)]), label = train_data$expNot_Expensive, nrounds = 149,max_depth=5, objective = "binary:logistic")
+
+# Use the XGBoost model to predict the 'exp' attribute for the test set
+predictions <- predict(xgb_model, as.matrix(test_data[, -ncol(test_data)]))
+
+# Convert the predicted probabilities to binary classifications
+binary_predictions <- ifelse(predictions >= 0.5, "Yes", "No")
+# Example usage:
+# Assuming 'binary_predictions' is the vector of binary predictions (Yes/No) and 'test_data$exp' is the actual labels
+acc <- accuracy(binary_predictions, test_data$exp)
+rec <- recall(binary_predictions, test_data$exp)
+spec <- specificity(binary_predictions, test_data$exp)
+auc <- auc_roc(predictions, test_data$exp)
+cat("Accuracy:", acc, "\n")
+cat("Recall:", rec, "\n")
+cat("Specificity:", spec, "\n")
+cat("AUC ROC:", auc, "\n")
+```
+
